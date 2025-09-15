@@ -16,6 +16,7 @@ window.addEventListener('unhandledrejection', (ev) => {
 try {
   // attempt to mount normally
   createApp(App).use(router).mount('#app');
+  try { window.__app_loaded = true; } catch (e) { /* ignore */ }
 } catch (err) {
   // render minimal error UI if mount fails (prevents white screen)
   const root = document.getElementById('app');
