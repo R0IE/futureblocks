@@ -11,4 +11,4 @@ Users can browse categories or use the search bar to find specific games.
 
 Developers can submit their games via a submission form.
 
-Submitted games are stored in the database (or JSON for simpler versions) and displayed on the site.
+-- NOT CURRENTLY (Submitted games are stored in the database (or JSON for simpler versions) and displayed on the site.)
