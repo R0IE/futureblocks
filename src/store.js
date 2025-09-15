@@ -1,5 +1,6 @@
 import { reactive, computed } from 'vue';
 import * as db from './db';
+import { supabase } from './lib/supabase';
 
 const initial = db.loadStateSync(); 
 const state = reactive(initial);
@@ -33,25 +34,64 @@ const store = {
     persist();
   },
 
-  createPost({ title, description, deadline, discord, media, tags }) {
+  async createPost({ title, description, deadline, discord, media = [], tags = [] }) {
     if (!state.currentUser) return { ok: false, msg: 'auth' };
+    const user = state.currentUser;
+
+    const uploadedUrls = [];
+    for (let i = 0; i < (media || []).length; i++) {
+      const m = media[i];
+      if (!m || !m.data) continue;
+
+      // convert data URL to Blob if needed
+      let blob;
+      if (typeof m.data === 'string' && m.data.startsWith('data:')) {
+        blob = await (await fetch(m.data)).blob();
+      } else if (m.file instanceof File) {
+        blob = m.file;
+      } else {
+        // assume base64 without prefix
+        const base64 = String(m.data).replace(/^data:.*;base64,/, '');
+        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        blob = new Blob([bytes], { type: m.type || 'application/octet-stream' });
+      }
+
+      const ext = (m.type && m.type.split('/')[1]) ? m.type.split('/')[1] : 'jpg';
+      const path = `media/${user.id}/${Date.now()}_${i}.${ext}`;
+
+      const { error: upErr } = await supabase.storage.from('media').upload(path, blob, {
+        contentType: m.type || 'application/octet-stream'
+      });
+
+      if (upErr) {
+        console.warn('upload failed', upErr);
+        continue;
+      }
+
+      const { data: publicData } = supabase.storage.from('media').getPublicUrl(path);
+      uploadedUrls.push(publicData.publicUrl);
+    }
+
     const post = {
       id: Date.now() + Math.random(),
-      authorId: state.currentUser.id,
-      authorName: state.currentUser.username,
+      authorId: user.id,
+      authorName: user.username || user.email || 'unknown',
       title,
       description,
       deadline,
       discord,
-      tags: tags || [],
-      media: media || [],
-      reactions: {}, 
-      reactedBy: {}, 
-      comments: [], 
+      tags,
+      media: uploadedUrls.map(u => ({ type: 'external', data: u })),
+      reactions: {},
+      reactedBy: {},
+      comments: [],
       createdAt: Date.now()
     };
+
     state.posts.unshift(post);
     persist();
+
+
     return { ok: true, post };
   },
   toggleReaction(postId, emoji) {

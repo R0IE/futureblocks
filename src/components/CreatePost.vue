@@ -194,17 +194,14 @@ export default {
     }
 
     async function submit() {
-      logDebug('submit clicked; media count=' + media.value.length);
       msg.value = '';
       if (!user) { msg.value = 'You must be logged in to create a post.'; return; }
       if (!titleTrimmed.value) { msg.value = 'Please provide a title.'; return; }
 
       updateTagsFromInput();
 
-      console.log('[CreatePost] submitting, media count =', media.value.length, media.value.map(m=>m.type));
-
       try {
-        const res = store.createPost({
+        const res = await store.createPost({
           title: titleTrimmed.value,
           description: description.value,
           deadline: deadline.value || null,
@@ -219,16 +216,9 @@ export default {
           return;
         }
 
-        msg.value = res && res.msg ? (res.msg === 'auth' ? 'Authentication required' : res.msg) : 'Failed to create post';
+        msg.value = res && res.msg ? res.msg : 'Failed to create post';
       } catch (err) {
-        console.error('[CreatePost] createPost error', err);
-        if (err && err.name === 'QuotaExceededError') {
-          msg.value = 'Storage full: reduce image sizes or clear old posts before creating a new post.';
-          logDebug('storage quota exceeded while saving post');
-        } else {
-          msg.value = 'Failed to create post: ' + (err && err.message ? err.message : 'unknown error');
-          logDebug('createPost exception: ' + (err && err.message ? err.message : 'unknown'));
-        }
+        msg.value = 'Upload/creation failed: ' + (err && err.message ? err.message : 'unknown');
       }
     }
 
