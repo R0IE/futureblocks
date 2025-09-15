@@ -1,0 +1,64 @@
+/* Dark neon palette and layout for a modern chat/community UI */
+:root{
+  --bg: #06060a;
+  --panel: #0b0f18;
+  --muted: #9aa7bb;
+  --text: #eaf1ff;
+  --neon-purple: #8b5cf6;
+  --neon-blue: #00d4ff;
+  --neon-pink: #ff6ac1;
+  --glass: rgba(255,255,255,0.03);
+  --radius: 12px;
+}
+
+/* Base reset */
+*{box-sizing:border-box}
+html,body,#app{height:100%; margin:0; padding:0;}
+body{
+  background:
+    radial-gradient(800px 400px at 10% 10%, rgba(139,92,246,0.04), transparent 6%),
+    radial-gradient(800px 400px at 90% 90%, rgba(0,212,255,0.02), transparent 6%),
+    var(--bg);
+  color:var(--text);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+/* Layout note: the App.vue template provides a full-bleed grid layout;
+   avoid rigid centered wrappers — content panels are card-like. */
+
+/* Common card look */
+.card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), transparent);
+  border-radius: 12px;
+  border:1px solid rgba(255,255,255,0.02);
+  padding:12px;
+}
+
+/* Utility text */
+.small { font-size:13px; color:var(--muted); }
+
+/* Buttons */
+button, .btn, .create-btn, .create-compact {
+  font-family:inherit;
+  transition: transform .12s ease, box-shadow .12s ease;
+  border: none;
+}
+
+/* Links muted */
+a { color:inherit; }
+
+/* Smooth transitions for hoverable elements */
+* { transition: background .12s ease, color .12s ease; }
+
+/* Additional global tweaks kept from previous design */
+
+/* Replace the grid layout rules so sidebars are removed */
+.app-layout {
+  display:block; /* App.vue now handles single-column main layout */
+}
+
+/* Ensure full-bleed main content uses page padding */
+.main-area { padding: 0; }
+/* (No global changes required for this update; reaction/reply UI styles are scoped in PostView.vue) */
