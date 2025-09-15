@@ -3,105 +3,105 @@ let remoteEndpoint = null;
 
 
 export function loadStateSync() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { users: [], posts: [], currentUser: null, searchQuery: '' };
-  } catch {
-    return { users: [], posts: [], currentUser: null, searchQuery: '' };
-  }
+	// synchronous bootstrap used by store
+	try {
+		return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { users: [], posts: [], currentUser: null, searchQuery: '' };
+	} catch {
+		return { users: [], posts: [], currentUser: null, searchQuery: '' };
+	}
 }
 
 export function setRemoteEndpoint(url) {
-  remoteEndpoint = url ? String(url) : null;
+	remoteEndpoint = url ? String(url) : null;
 }
 export function clearRemoteEndpoint() { remoteEndpoint = null; }
 
 function trySaveLocal(payload) {
-  localStorage.setItem(STORAGE_KEY, payload);
+	localStorage.setItem(STORAGE_KEY, payload);
 }
 
-
-function compactMedia(state) {
-  for (let i = state.posts.length - 1; i >= 0; i--) {
-    const p = state.posts[i];
-    if (p && p.media && p.media.length) {
-      p.media = [];
-      return true;
-    }
-  }
-  return false;
-}
-
+// best-effort async save; returns a Promise
 export async function saveState(state) {
-  const payloadObj = {
-    users: state.users,
-    posts: state.posts,
-    currentUser: state.currentUser,
-    searchQuery: state.searchQuery || ''
-  };
+	const payloadObj = {
+		users: state.users,
+		posts: state.posts,
+		currentUser: state.currentUser,
+		searchQuery: state.searchQuery || ''
+	};
 
-  let clonedState = JSON.parse(JSON.stringify(payloadObj));
-  let payload = JSON.stringify(clonedState);
+	let payload = JSON.stringify(payloadObj);
 
-  try {
-    trySaveLocal(payload);
-  } catch (err) {
-    try {
-      let compacted = false;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        if (Array.isArray(state.posts) && state.posts.length) {
-          let removed = false;
-          for (let i = state.posts.length - 1; i >= 0; i--) {
-            const p = state.posts[i];
-            if (p && p.media && p.media.length) {
-              p.media = [];
-              removed = true;
-              compacted = true;
-              break;
-            }
-          }
-          if (!removed) break;
-        } else {
-          break;
-        }
+	try {
+		trySaveLocal(payload);
+	} catch (err) {
+		// try lightweight compaction: remove media from oldest posts then retry
+		try {
+			let compacted = false;
+			for (let attempt = 0; attempt < 5; attempt++) {
+				let removed = false;
+				if (Array.isArray(state.posts) && state.posts.length) {
+					for (let i = state.posts.length - 1; i >= 0; i--) {
+						const p = state.posts[i];
+						if (p && p.media && p.media.length) {
+							p.media = [];
+							removed = true;
+							break;
+						}
+					}
+				}
+				if (!removed) break;
+				// retry
+				payload = JSON.stringify({
+					users: state.users,
+					posts: state.posts,
+					currentUser: state.currentUser,
+					searchQuery: state.searchQuery || ''
+				});
+				try {
+					trySaveLocal(payload);
+					compacted = true;
+					break;
+				} catch (_) {
+					// continue compacting
+				}
+			}
 
-        clonedState = JSON.parse(JSON.stringify({
-          users: state.users,
-          posts: state.posts,
-          currentUser: state.currentUser,
-          searchQuery: state.searchQuery || ''
-        }));
-        payload = JSON.stringify(clonedState);
-        try {
-          trySaveLocal(payload);
-          compacted = true;
-          break;
-        } catch (e2) {
-        }
-      }
+			if (!compacted) {
+				// last resort: clear posts (preserve users/currentUser) and try
+				const backup = Array.isArray(state.posts) ? state.posts.slice() : null;
+				if (Array.isArray(state.posts)) state.posts.splice(0, state.posts.length);
+				const minimal = JSON.stringify({
+					users: state.users,
+					posts: state.posts,
+					currentUser: state.currentUser,
+					searchQuery: state.searchQuery || ''
+				});
+				try {
+					trySaveLocal(minimal);
+				} catch (e3) {
+					// restore and rethrow original
+					if (backup) state.posts.splice(0, 0, ...backup);
+					throw err;
+				}
+			}
+		} catch (inner) {
+			throw err;
+		}
+	}
 
-      if (!compacted) {
-        const postsBackup = state.posts.slice ? state.posts.slice() : state.posts;
-        try {
-          state.posts.splice(0, state.posts.length);
-          const minimal = JSON.stringify({
-            users: state.users,
-            posts: state.posts,
-            currentUser: state.currentUser,
-            searchQuery: state.searchQuery || ''
-          });
-          trySaveLocal(minimal);
-        } catch (e3) {
-          if (Array.isArray(state.posts) && Array.isArray(postsBackup)) {
-            state.posts.splice(0, 0, ...postsBackup);
-          }
-          throw err; 
-        }
-      }
-    } catch (innerErr) {
-      throw err;
-    }
-  }
+	// optional: try to notify remote endpoint (best-effort)
+	if (remoteEndpoint) {
+		try {
+			await fetch(remoteEndpoint.replace(/\/+$/, '') + '/sync', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: payload
+			}).catch(()=>{/* ignore remote errors */});
+		} catch (_) { /* ignore */ }
+	}
 
+	return true;
+}
   if (remoteEndpoint) {
     try {
       await fetch(remoteEndpoint.replace(/\/+$/,'') + '/sync', {
