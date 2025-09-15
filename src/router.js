@@ -8,10 +8,13 @@ const routes = [
   { path: '/', component: PostList },
   { path: '/games', component: PostList },
   { path: '/features', component: PostList },
-  { path: '/upcoming', component: PostList }, 
+  { path: '/upcoming', component: PostList },
   { path: '/auth', component: Auth },
   { path: '/create', component: CreatePost },
   { path: '/post/:id', component: PostView, props: true }
 ];
 
-export default createRouter({ history: createWebHistory(), routes });
+export default createRouter({
+  history: createWebHistory(),
+  routes
+});
