@@ -39,37 +39,88 @@ const store = {
     const user = state.currentUser;
 
     const uploadedUrls = [];
+
+    // Helper: convert various media formats into a Blob and base64
+    async function toBlobAndBase64(m) {
+      if (!m || !m.data) return { blob: null, base64: null, mime: m && m.type ? m.type : 'application/octet-stream' };
+      let blob = null;
+      let base64 = null;
+      try {
+        if (typeof m.data === 'string' && m.data.startsWith('data:')) {
+          // data URL
+          blob = await (await fetch(m.data)).blob();
+          base64 = String(m.data).replace(/^data:.*;base64,/, '');
+        } else if (m.file instanceof File) {
+          blob = m.file;
+          base64 = await (new Promise((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(String(r.result).replace(/^data:.*;base64,/, ''));
+            r.onerror = rej;
+            r.readAsDataURL(m.file);
+          }));
+        } else {
+          // assume raw base64 string
+          base64 = String(m.data).replace(/^data:.*;base64,/, '');
+          const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+          blob = new Blob([bytes], { type: m.type || 'application/octet-stream' });
+        }
+      } catch (e) {
+        // best-effort fallback
+        console.warn('toBlobAndBase64 failed', e);
+      }
+      return { blob, base64, mime: m.type || 'application/octet-stream' };
+    }
+
+    // First try Supabase storage if client is available
+    const sb = typeof supabase !== 'undefined' ? supabase : null;
     for (let i = 0; i < (media || []).length; i++) {
       const m = media[i];
-      if (!m || !m.data) continue;
+      const { blob, base64, mime } = await toBlobAndBase64(m);
+      const ext = (mime && mime.split('/')[1]) ? mime.split('/')[1] : 'jpg';
+      const filename = `${user.id || 'anon'}_${Date.now()}_${i}.${ext}`;
+      const path = `media/${user.id || 'anon'}/${filename}`;
 
-      // convert data URL to Blob if needed
-      let blob;
-      if (typeof m.data === 'string' && m.data.startsWith('data:')) {
-        blob = await (await fetch(m.data)).blob();
-      } else if (m.file instanceof File) {
-        blob = m.file;
-      } else {
-        // assume base64 without prefix
-        const base64 = String(m.data).replace(/^data:.*;base64,/, '');
-        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-        blob = new Blob([bytes], { type: m.type || 'application/octet-stream' });
+      // Try Supabase upload
+      if (sb && sb.storage && typeof sb.storage.from === 'function') {
+        try {
+          const { error: upErr } = await sb.storage.from('media').upload(path, blob || new Blob([]), { contentType: mime || 'application/octet-stream' });
+          if (!upErr) {
+            const { data: publicData } = sb.storage.from('media').getPublicUrl(path);
+            if (publicData && publicData.publicUrl) {
+              uploadedUrls.push(publicData.publicUrl);
+              continue;
+            }
+          } else {
+            console.warn('Supabase upload error', upErr);
+          }
+        } catch (e) {
+          console.warn('Supabase upload threw', e);
+        }
       }
 
-      const ext = (m.type && m.type.split('/')[1]) ? m.type.split('/')[1] : 'jpg';
-      const path = `media/${user.id}/${Date.now()}_${i}.${ext}`;
-
-      const { error: upErr } = await supabase.storage.from('media').upload(path, blob, {
-        contentType: m.type || 'application/octet-stream'
-      });
-
-      if (upErr) {
-        console.warn('upload failed', upErr);
-        continue;
+      // Fallback: try serverless upload endpoint via db.uploadToRemote
+      try {
+        if (typeof db.uploadToRemote === 'function') {
+          const resp = await db.uploadToRemote(filename, mime, base64 || '');
+          if (resp && (resp.url || resp?.raw?.url)) {
+            uploadedUrls.push(resp.url || resp.raw.url);
+            continue;
+          }
+          // if provider returned different shape, try common property
+          if (resp && typeof resp === 'string') {
+            uploadedUrls.push(resp);
+            continue;
+          }
+        }
+      } catch (e) {
+        console.warn('uploadToRemote failed', e);
       }
 
-      const { data: publicData } = supabase.storage.from('media').getPublicUrl(path);
-      uploadedUrls.push(publicData.publicUrl);
+      // Last-resort: keep data URL inline (will increase localStorage size)
+      if (base64) {
+        const dataUrl = `data:${mime};base64,${base64}`;
+        uploadedUrls.push(dataUrl);
+      }
     }
 
     const post = {
@@ -81,7 +132,7 @@ const store = {
       deadline,
       discord,
       tags,
-      media: uploadedUrls.map(u => ({ type: 'external', data: u })),
+      media: (uploadedUrls || []).map(u => ({ type: u && u.startsWith('data:') ? 'image' : 'external', data: u })),
       reactions: {},
       reactedBy: {},
       comments: [],
@@ -90,7 +141,6 @@ const store = {
 
     state.posts.unshift(post);
     persist();
-
 
     return { ok: true, post };
   },
