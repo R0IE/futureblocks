@@ -29,7 +29,6 @@
 
           <div class="actions">
             <div class="reactions">
-              <!-- post-level reactions: show active state when current user reacted with this emoji -->
               <button
                 v-for="e in emojis"
                 :key="e"
@@ -46,11 +45,10 @@
             </div>
           </div>
 
-          <!-- Comments (updated: pinned first, replies, reactions, pin/unpin, reply composer) -->
+        
           <div class="comments-section">
             <h3>Comments <span class="muted">({{ allComments.length }})</span></h3>
 
-            <!-- pinned comments -->
             <div v-if="pinnedComments.length" class="pinned-block">
               <div class="pinned-label">Pinned</div>
               <div v-for="c in pinnedComments" :key="c.id" class="comment">
@@ -71,7 +69,7 @@
                       </div>
                     </div>
                   </div>
-                  <!-- replies for pinned comment -->
+
                   <div class="replies-controls" v-if="repliesOf(c.id).length">
                     <button class="show-replies-btn" v-if="!replyLimit[c.id] || replyLimit[c.id] === 0" @click="showInitialReplies(c.id)">
                       Show {{ Math.min(5, repliesOf(c.id).length) }} replies
@@ -97,7 +95,6 @@
               </div>
             </div>
 
-            <!-- top-level comments -->
             <div class="comment-list">
               <div v-for="c in topLevelComments" :key="c.id" class="comment">
                 <img v-if="getUserAvatar(c.authorId)" :src="getUserAvatar(c.authorId)" class="comment-avatar" />
@@ -112,7 +109,7 @@
 
                     <div class="comment-row">
                       <div class="reacts">
-                        <!-- comment reaction pills: active if current user reacted on this comment -->
+                    
                         <button
                           v-for="e in commentEmojis"
                           :key="e"
@@ -128,7 +125,6 @@
                     </div>
                   </div>
 
-                  <!-- replies controls -->
                   <div class="replies-controls" v-if="repliesOf(c.id).length">
                     <button class="show-replies-btn" v-if="!replyLimit[c.id] || replyLimit[c.id] === 0" @click="showInitialReplies(c.id)">
                       Show {{ Math.min(5, repliesOf(c.id).length) }} replies
@@ -159,7 +155,6 @@
                     </div>
                   </div>
 
-                  <!-- reply composer for this comment -->
                   <div v-if="replyOpen[c.id]" class="reply-composer">
                     <img v-if="currentUser && currentUser.avatar" :src="currentUser.avatar" class="comment-avatar" />
                     <div class="compose-right">
@@ -175,7 +170,7 @@
               </div>
             </div>
 
-            <!-- comment composer for new top-level comment (kept previously) -->
+        
             <div class="comment-form" v-if="currentUser">
               <div class="comment-compose">
                 <img v-if="currentUser && currentUser.avatar" :src="currentUser.avatar" class="comment-avatar" />
@@ -231,7 +226,6 @@
       </div>
     </aside>
 
-    <!-- Lightbox modal -->
     <div v-if="lightboxSrc" class="lightbox" @click="closeLightbox">
       <div class="lightbox-inner" @click.stop>
         <button class="close" @click="closeLightbox">✕</button>
@@ -258,29 +252,23 @@ export default {
     const emojis = ['👍','❤️','🚀','🔥'];
     const commentEmojis = ['👍','❤️','🔥'];
 
-    // lightbox (was missing -> caused "Property 'lightboxSrc' was accessed during render" warning)
     const lightboxSrc = ref(null);
     const lightboxItem = ref(null);
     function openMedia(m) { lightboxItem.value = m; lightboxSrc.value = m && m.data ? m.data : null; }
     function closeLightbox() { lightboxSrc.value = null; lightboxItem.value = null; }
     function isImage(m) { return m && m.type === 'image'; }
 
-    // comments flat array from post.comments
     const allComments = computed(()=> (post.value && post.value.comments) ? post.value.comments : []);
 
-    // pinned first
     const pinnedComments = computed(()=> allComments.value.filter(c=>c.pinned));
 
-    // top-level comments (parentId == null and not pinned)
     const topLevelComments = computed(()=> allComments.value.filter(c=>!c.parentId && !c.pinned));
 
-    // helper to get replies for a comment
     function repliesOf(commentId) {
       return allComments.value.filter(c => c.parentId === commentId);
     }
 
-    // NEW: per-comment visible reply limits
-    const replyLimit = reactive({}); // map commentId -> number visible
+    const replyLimit = reactive({}); 
 
     function visibleReplies(commentId) {
       const arr = repliesOf(commentId);
@@ -304,7 +292,6 @@ export default {
       replyLimit[commentId] = 0;
     }
 
-    // local reactive state for reply boxes and reply text per comment id
     const replyOpen = reactive({});
     const replyText = reactive({});
 
@@ -317,7 +304,6 @@ export default {
       replyText[cid] = '';
     }
 
-    // post a reply
     function postReply(parentId) {
       const txt = (replyText[parentId] || '').trim();
       if (!txt) return;
@@ -328,7 +314,6 @@ export default {
       }
     }
 
-    // comment composer (top-level)
     const commentText = ref('');
     const commentMsg = ref('');
     function addComment() {
@@ -353,26 +338,21 @@ export default {
       try { return new Date(ts).toLocaleString(); } catch(e) { return ''; }
     }
 
-    // toggle reaction on comment
     function toggleCommentReact(comment, emoji) {
       store.toggleCommentReaction(post.value.id, comment.id, emoji);
     }
 
-    // pin/unpin comment (only post author allowed)
     async function pinComment(c) {
       const res = store.pinComment(post.value.id, c.id);
       if (!res.ok) {
-        // optionally show message; silent for now
       }
     }
 
-    // helper: does current user have a reaction on the post matching emoji `e`?
     function isPostReacted(e) {
       if (!currentUser || !post.value) return false;
       return post.value.reactedBy && post.value.reactedBy[currentUser.id] === e;
     }
 
-    // expose computed/funcs
     return {
       post, currentUser, authorAvatar: computed(()=> {
         if (!post.value) return null;
@@ -386,7 +366,6 @@ export default {
       }), formattedDate: computed(()=> post.value ? new Date(post.value.createdAt).toLocaleString() : ''),
       emojis, react: (e)=>{ if (!post.value) return; store.toggleReaction(post.value.id, e); }, totalReacts: (p)=> Object.values(p.reactions || {}).reduce((s,x)=>s+(x||0),0),
 
-      // comments exports
       allComments, pinnedComments, topLevelComments, repliesOf,
       replyLimit, visibleReplies, showInitialReplies, showMoreReplies, hideReplies,
       replyOpen, replyText, toggleReplyBox, cancelReply, postReply,
@@ -394,10 +373,8 @@ export default {
       getUserAvatar, formatDate,
       toggleCommentReact, pinComment, commentEmojis,
 
-      // lightbox exports
       lightboxSrc, lightboxItem, openMedia, closeLightbox, isImage,
 
-      // expose helper for template
       isPostReacted,
     };
   }

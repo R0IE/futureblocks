@@ -1,6 +1,5 @@
 <template>
   <div>
-    <!-- NEW: Tag filter bar (only on home) -->
     <div v-if="route.path === '/'" class="tag-bar">
       <button :class="['tag-btn', { active: selectedTag === '' }]" @click="selectTag('')">All</button>
       <button v-for="t in allTags" :key="t" :class="['tag-btn', { active: selectedTag===t }]" @click="selectTag(t)">{{ t }}</button>
@@ -12,12 +11,10 @@
         <p class="small">{{ heroSubtitle }}</p>
       </div>
 
-      <!-- FEATURES: top5 display header -->
       <div v-if="route.path === '/features'" class="features-top5">
         <div class="small muted">Top 5 Games</div>
       </div>
 
-      <!-- UPCOMING: timeline selector -->
       <div v-if="route.path === '/upcoming'" class="timeline-row">
         <label class="small muted">Timeline:</label>
         <select v-model="timeline">
@@ -72,7 +69,6 @@ export default {
     const query = computed(()=> (store.state.searchQuery || '').toLowerCase().trim());
     const route = useRoute();
 
-    // live "now" for countdowns
     const now = ref(new Date());
     let timer = null;
     onMounted(()=> {
@@ -80,7 +76,6 @@ export default {
     });
     onUnmounted(()=> { if (timer) clearInterval(timer); });
 
-    // tags
     const selectedTag = ref('');
     const allTags = computed(()=> {
       const s = new Set();
@@ -89,7 +84,6 @@ export default {
     });
     function selectTag(t){ selectedTag.value = t; }
 
-    // upcoming timeline
     const timeline = ref('week');
     function inTimeline(deadlineStr){
       if (!deadlineStr) return false;
@@ -107,7 +101,6 @@ export default {
       return d >= n;
     }
 
-    // human friendly remaining time until deadline
     function timeUntil(deadlineStr) {
       if (!deadlineStr) return '';
       const d = new Date(deadlineStr + 'T00:00:00');
@@ -125,7 +118,6 @@ export default {
     const displayed = computed(()=> {
       const arr = posts.slice();
       if (route.path === '/features') {
-        // top 5 by reactions
         arr.sort((a,b)=> {
           const sa = Object.values(a.reactions||{}).reduce((s,x)=>s+x,0);
           const sb = Object.values(b.reactions||{}).reduce((s,x)=>s+x,0);
@@ -138,7 +130,6 @@ export default {
         return arr.filter(p => p.deadline && inTimeline(p.deadline))
                   .sort((a,b)=> new Date(a.deadline) - new Date(b.deadline));
       }
-      // home: apply search, sort by popularity/recency and tag filter
       arr.sort((a,b)=> {
         const ra = Object.values(a.reactions||{}).reduce((s,x)=>s+x,0);
         const rb = Object.values(b.reactions||{}).reduce((s,x)=>s+x,0);
@@ -193,7 +184,7 @@ export default {
 
     return { displayed, heroStyle, heroTitle, heroSubtitle, totalReacts, snippet, stars,
              route, allTags, selectedTag, selectTag, timeline,
-             commentEmojis: [], // noop for PostList scope
+             commentEmojis: [],
              timeUntil,
              emptyMessage };
   }

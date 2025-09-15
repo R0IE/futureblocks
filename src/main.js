@@ -5,7 +5,7 @@ import './styles.css';
 
 console.log('[main] starting app');
 
-// global error hooks to surface runtime issues
+
 window.addEventListener('error', (ev) => {
   console.error('[global error]', ev.message || ev.error, ev);
 });

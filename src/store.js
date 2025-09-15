@@ -1,13 +1,10 @@
 import { reactive, computed } from 'vue';
-import * as db from './db'; // new adapter
+import * as db from './db';
 
-// replace previous load/save with db adapter
-const initial = db.loadStateSync(); // synchronous bootstrap
+const initial = db.loadStateSync(); 
 const state = reactive(initial);
 
-// helper to persist current reactive state (best effort async)
 function persist() {
-  // call db.saveState but don't block UI; log errors
   db.saveState(state).catch(err => {
     console.error('[store] saveState failed', err);
   });
@@ -35,7 +32,7 @@ const store = {
     state.currentUser = null;
     persist();
   },
-  // updated to accept tags (array of strings)
+
   createPost({ title, description, deadline, discord, media, tags }) {
     if (!state.currentUser) return { ok: false, msg: 'auth' };
     const post = {
@@ -46,9 +43,9 @@ const store = {
       description,
       deadline,
       discord,
-      tags: tags || [], // new: tags array
-      media: media || [], // array of {type:'image'|'video', data:base64}
-      reactions: {}, // key: emoji -> count
+      tags: tags || [],
+      media: media || [],
+      reactions: {}, 
       reactedBy: {}, 
       comments: [], 
       createdAt: Date.now()
@@ -140,7 +137,6 @@ const store = {
     if (!state.currentUser) return { ok: false, msg: 'auth' };
     const post = state.posts.find(p => p.id == postId);
     if (!post) return { ok: false, msg: 'post_not_found' };
-    // only post author can pin comments
     if (!post.authorId || post.authorId !== state.currentUser.id) return { ok: false, msg: 'forbidden' };
     post.comments = post.comments || [];
     const c = post.comments.find(x => x.id == commentId);

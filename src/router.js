@@ -8,7 +8,7 @@ const routes = [
   { path: '/', component: PostList },
   { path: '/games', component: PostList },
   { path: '/features', component: PostList },
-  { path: '/upcoming', component: PostList }, // new upcoming view (same component with timeline)
+  { path: '/upcoming', component: PostList }, 
   { path: '/auth', component: Auth },
   { path: '/create', component: CreatePost },
   { path: '/post/:id', component: PostView, props: true }

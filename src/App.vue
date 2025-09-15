@@ -7,7 +7,6 @@
           <h1 class="brand-title">Roblox Showcase</h1>
         </div>
 
-        <!-- compact nav (Home / Games / Features / Community) -->
         <nav class="top-nav">
           <router-link to="/" class="nav-link">Home</router-link>
           <router-link to="/games" class="nav-link">Games</router-link>

@@ -20,7 +20,6 @@
 
         <textarea class="desc-input" v-model="description" placeholder="Describe your project, goals, and progress..."></textarea>
 
-        <!-- NEW: tags input -->
         <div class="tags-row">
           <input v-model="tagsInput" @input="updateTagsFromInput" placeholder="Tags (comma separated) e.g. adventure,platformer" class="tags-input" />
           <div class="tags-preview">
@@ -31,7 +30,7 @@
         <div class="meta-row">
           <input v-model="discord" placeholder="Discord invite or link (optional)" class="discord-input" />
           <div class="file-upload">
-            <!-- Attach button with the real file input overlayed on top (ensures native picker opens reliably) -->
+        
             <button type="button" class="upload-cta" title="Attach media">Attach</button>
             <input ref="fileInput" id="fileInput" type="file" @change="onFiles" multiple accept="image/*,image/webp,video/*,.webp,.mp4,.webm,.mov" class="visually-hidden-file-input" />
           </div>
@@ -53,7 +52,6 @@
           </div>
         </div>
 
-        <!-- DEBUG PANEL: visible logs when console isn't available -->
         <div class="debug-box">
           <button type="button" class="btn-cancel" @click="debugOpen = !debugOpen">{{ debugOpen ? 'Hide' : 'Show' }} debug</button>
           <div v-if="debugOpen" class="debug-list">
@@ -86,7 +84,6 @@ export default {
     const tags = ref([]);
     const fileInput = ref(null);
 
-    // debug helpers (visible in-page)
     const debugMessages = ref([]);
     const debugOpen = ref(true);
     function logDebug(msg) {
@@ -109,7 +106,6 @@ export default {
           logDebug('clicked fileInput via ref');
           return;
         }
-        // fallback: click by id if ref not set
         const el = document.getElementById('fileInput');
         if (el && typeof el.click === 'function') {
           el.click();
@@ -122,7 +118,6 @@ export default {
       }
     }
 
-    // helper to read one file as dataURL (Promise) - keep for videos/fallback
     function readFileAsDataURL(file) {
       return new Promise((res, rej) => {
         const reader = new FileReader();
@@ -132,10 +127,8 @@ export default {
       });
     }
 
-    // resize/compress images to reduce storage size (returns dataURL)
     async function resizeImage(file, maxWidth = 1600, quality = 0.8) {
       try {
-        // Use createImageBitmap when available for performance
         const bitmap = await createImageBitmap(file);
         const ratio = Math.min(1, maxWidth / bitmap.width);
         const w = Math.max(1, Math.round(bitmap.width * ratio));
@@ -145,12 +138,10 @@ export default {
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(bitmap, 0, 0, w, h);
-        // Prefer webp for better compression when available
         const outType = 'image/webp';
         const dataUrl = canvas.toDataURL(outType, quality);
         return dataUrl;
       } catch (err) {
-        // fallback to FileReader if createImageBitmap fails
         return await readFileAsDataURL(file);
       }
     }
@@ -208,10 +199,8 @@ export default {
       if (!user) { msg.value = 'You must be logged in to create a post.'; return; }
       if (!titleTrimmed.value) { msg.value = 'Please provide a title.'; return; }
 
-      // ensure tags updated
       updateTagsFromInput();
 
-      // debug: show how many media items are about to be submitted
       console.log('[CreatePost] submitting, media count =', media.value.length, media.value.map(m=>m.type));
 
       try {
@@ -226,15 +215,12 @@ export default {
 
         if (res && res.ok) {
           reset();
-          // navigate to the created post
           router.push('/post/' + res.post.id);
           return;
         }
 
-        // handle known failure response
         msg.value = res && res.msg ? (res.msg === 'auth' ? 'Authentication required' : res.msg) : 'Failed to create post';
       } catch (err) {
-        // likely QuotaExceededError from localStorage.setItem -> show helpful guidance
         console.error('[CreatePost] createPost error', err);
         if (err && err.name === 'QuotaExceededError') {
           msg.value = 'Storage full: reduce image sizes or clear old posts before creating a new post.';
@@ -266,7 +252,7 @@ export default {
       onFiles,
       removeMedia,
       debugMessages, debugOpen, logDebug,
-      fileInput, // ensure ref returned
+      fileInput, 
       titleTrimmed,
       reset,
       submit
@@ -388,7 +374,7 @@ export default {
   height: 100%;
   opacity: 0;
   cursor: pointer;
-  z-index: 2; /* ensure input is above the button */
+  z-index: 2; 
   border: 0;
   padding: 0;
   margin: 0;
