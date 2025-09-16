@@ -7,11 +7,24 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+  // Require Authorization header
+  const auth = (req.headers && (req.headers.authorization || req.headers.Authorization)) || null;
+  if (!auth || !String(auth).toLowerCase().startsWith('bearer ')) return res.status(401).json({ error: 'missing_auth' });
+  const token = String(auth).split(' ')[1];
 
   try {
+    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !userData || !userData.user) {
+      console.warn('create-post auth verification failed', userErr);
+      return res.status(401).json({ error: 'invalid_token' });
+    }
+
+    const { user } = userData;
     const body = req.body || {};
     const { userId, title, description, deadline, discord, tags, media } = body;
     if (!userId || !title) return res.status(400).json({ error: 'missing_parameters' });
+
+    if (String(user.id) !== String(userId)) return res.status(403).json({ error: 'forbidden' });
 
     // Validate media array: [{ filename, mime, base64 }]
     const uploadedUrls = [];

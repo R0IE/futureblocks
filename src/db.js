@@ -24,13 +24,15 @@ function trySaveLocal(payload) {
 }
 
 // New: upload helper — sends a single file (base64) to the serverless upload endpoint
-export async function uploadToRemote(name, mime, base64Data) {
+export async function uploadToRemote(name, mime, base64Data, token) {
   if (!remoteEndpoint) throw new Error('No remote endpoint configured (VITE_REMOTE_ENDPOINT)');
   const url = remoteEndpoint + '/api/upload';
   const body = { name: String(name || ''), mime: String(mime || ''), data: String(base64Data || '') };
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body)
   });
   if (!res.ok) {

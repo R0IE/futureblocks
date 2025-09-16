@@ -14,6 +14,7 @@ module.exports = async (req, res) => {
   const base64 = String(data).replace(/^data:.*;base64,/, '');
   const buffer = Buffer.from(base64, 'base64');
 
+  // If Vercel Blob token is configured, allow direct upload via server (this is considered trusted).
   if (process.env.VERCEL_BLOB_TOKEN) {
     try {
       const blobPkg = require('@vercel/blob');
@@ -43,13 +44,23 @@ module.exports = async (req, res) => {
   const BLOB_PROVIDER_URL = process.env.BLOB_PROVIDER_URL || null;
   const BLOB_PROVIDER_TOKEN = process.env.BLOB_PROVIDER_TOKEN || null;
 
+  // When forwarding to an external blob provider, require an Authorization header so
+  // only authenticated clients may ask the server to forward uploads. This prevents
+  // arbitrary public upload forwarding.
   if (BLOB_PROVIDER_URL) {
+    const auth = (req.headers && (req.headers.authorization || req.headers.Authorization)) || null;
+    if (!auth || !String(auth).toLowerCase().startsWith('bearer ')) {
+      res.status(401).json({ error: 'missing_auth' });
+      return;
+    }
     try {
       const forwardRes = await fetch(BLOB_PROVIDER_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(BLOB_PROVIDER_TOKEN ? { 'Authorization': `Bearer ${BLOB_PROVIDER_TOKEN}` } : {})
+          ...(BLOB_PROVIDER_TOKEN ? { 'Authorization': `Bearer ${BLOB_PROVIDER_TOKEN}` } : {}),
+          // also forward the client's Authorization header so the provider can validate the user if necessary
+          ...(auth ? { 'X-Forwarded-Authorization': auth } : {})
         },
         body: JSON.stringify({ name, mime, data: base64 })
       });

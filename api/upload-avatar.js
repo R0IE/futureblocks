@@ -9,9 +9,25 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
+  // Require an Authorization header (Bearer <access_token>) to ensure request comes from an authenticated user
+  const auth = (req.headers && (req.headers.authorization || req.headers.Authorization)) || null;
+  if (!auth || !String(auth).toLowerCase().startsWith('bearer ')) return res.status(401).json({ error: 'missing_auth' });
+  const token = String(auth).split(' ')[1];
+
   try {
+    // verify token maps to a valid user
+    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !userData || !userData.user) {
+      console.warn('upload-avatar auth verification failed', userErr);
+      return res.status(401).json({ error: 'invalid_token' });
+    }
+
+    const { user } = userData;
     const { userId, filename, mime, base64 } = req.body || {};
     if (!userId || !base64) return res.status(400).json({ error: 'missing_parameters' });
+
+    // ensure the token holder is the same as the provided userId (prevent rogue uploads)
+    if (String(user.id) !== String(userId)) return res.status(403).json({ error: 'forbidden' });
 
     const ext = (filename && filename.split('.').pop()) || (mime && mime.split('/')[1]) || 'png';
     const safeName = filename ? filename.replace(/[^a-zA-Z0-9._-]/g, '_') : `avatar.${ext}`;

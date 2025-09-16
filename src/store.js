@@ -189,7 +189,13 @@ const store = {
       // Fallback: try serverless upload endpoint via db.uploadToRemote
       try {
         if (typeof db.uploadToRemote === 'function') {
-          const resp = await db.uploadToRemote(filename, mime, base64 || '');
+          // try to forward the current Supabase access token so the server may verify the user
+          let token = null;
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            token = sessionData?.session?.access_token || null;
+          } catch (e) { token = null; }
+          const resp = await db.uploadToRemote(filename, mime, base64 || '', token);
           if (resp && (resp.url || resp?.raw?.url)) {
             uploadedUrls.push(resp.url || resp.raw.url);
             continue;
@@ -580,9 +586,14 @@ const store = {
             // to upload to Supabase storage and return a public URL. This avoids exposing service
             // keys in the browser and is compatible with Vercel deployments.
             try {
+              // attach current Supabase access token so the server can verify the user
+              let token = null;
+              try { const s = await supabase.auth.getSession(); token = s?.data?.session?.access_token || null; } catch(e) { token = null; }
+              const headers = { 'Content-Type': 'application/json' };
+              if (token) headers['Authorization'] = `Bearer ${token}`;
               const resp = await fetch('/api/upload-avatar', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ userId, filename, mime, base64 })
               });
               if (resp && resp.ok) {
