@@ -1,6 +1,7 @@
 import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
+import supabase from './lib/supabase';
 import './styles.css';
 
 console.log('[main] starting app');
@@ -15,7 +16,11 @@ window.addEventListener('unhandledrejection', (ev) => {
 
 try {
   // attempt to mount normally
-  createApp(App).use(router).mount('#app');
+  const app = createApp(App);
+  // make supabase available in options api components via this.$supabase
+  app.config.globalProperties.$supabase = supabase;
+
+  app.use(router).mount('#app');
   try { window.__app_loaded = true; } catch (e) { /* ignore */ }
 } catch (err) {
   // render minimal error UI if mount fails (prevents white screen)

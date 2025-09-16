@@ -43,6 +43,7 @@
 import store from '../store';
 import { reactive, toRefs, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import supabase from '../lib/supabase';
 
 export default {
   setup() {
@@ -75,7 +76,45 @@ export default {
     }
 
     return { ...toRefs(r), avatarPreview, onFile, login, register, user: store.state.currentUser, msg: r.msg };
-  }
+  },
+  created() {
+    const session = supabase.auth.getSession().then(({ data }) => {
+      this.user = data.session?.user ?? null;
+    });
+
+    this.authListener = supabase.auth.onAuthStateChange((event, session) => {
+      this.user = session?.user ?? null;
+    });
+  },
+  unmounted() {
+    if (this.authListener?.subscription) {
+      this.authListener.subscription.unsubscribe();
+    }
+  },
+  methods: {
+    async login() {
+      this.message = null;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: this.email,
+        password: this.password,
+      });
+      if (error) this.message = error.message;
+      else this.user = data.user ?? null;
+    },
+    async register() {
+      this.message = null;
+      const { data, error } = await supabase.auth.signUp({
+        email: this.email,
+        password: this.password,
+      });
+      if (error) this.message = error.message;
+      else this.message = 'Registration successful — check your email if confirmation is required.';
+    },
+    async signOut() {
+      await supabase.auth.signOut();
+      this.user = null;
+    },
+  },
 };
 </script>
 
