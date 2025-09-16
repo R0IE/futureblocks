@@ -442,20 +442,19 @@ export default {
 
 .hero {
   border-radius:12px;
-  min-height:160px;
-  padding:18px;
+  min-height:120px;
+  padding:14px;
   display:flex;
   align-items:flex-end;
   color:var(--text);
   background-size:cover;
   background-position:center;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
 }
 .hero-meta .title { margin:0; font-size:22px; font-weight:800; letter-spacing:-0.4px; }
 .sub { color:var(--muted); margin-top:6px; }
 
 /* embed area (discord-like message box) */
-.embed { background: var(--panel); border-radius:10px; padding:14px; border:1px solid rgba(255,255,255,0.02); box-shadow: 0 6px 18px rgba(2,6,23,0.5); }
+.embed { padding:10px; }
 .author-line { display:flex; gap:12px; align-items:center; margin-bottom:10px; }
 .author-avatar { width:52px; height:52px; border-radius:10px; object-fit:cover; border:2px solid rgba(255,255,255,0.03); }
 .author-name { font-weight:700; }
@@ -493,6 +492,15 @@ export default {
 
 /* upload input */
 .upload input[type=file] { display:block; margin-top:6px; color:var(--muted); }
+
+.tip-area { display:flex; align-items:center; gap:10px; }
+.tip-menu { background: rgba(0,0,0,0.6); padding:10px; border-radius:8px; position:absolute; z-index:60; margin-top:8px; }
+.tip-presets .preset { background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--text); padding:6px 10px; border-radius:8px; margin-right:6px; cursor:pointer; }
+
+@media (max-width:900px){
+  .post-view { flex-direction:column; }
+  .sidebar { width:100%; max-width:100%; }
+}
 
 /* sidebar card */
 .info-card { background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00)); padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.02); display:flex; flex-direction:column; gap:12px; }

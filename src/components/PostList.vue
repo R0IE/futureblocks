@@ -52,7 +52,7 @@
     </div>
 
     <div class="grid">
-      <div v-for="p in displayed" :key="p.id" class="card" @click="$router.push('/post/'+p.id)">
+      <div v-for="(p, idx) in displayed" :key="p.id" :class="['card', idx===0 && route.path==='/' ? 'featured-1' : 'panel']" @click="$router.push('/post/'+p.id)">
         <div class="thumb">
           <img v-if="p.media && p.media[0] && p.media[0].type==='image'" :src="p.media[0].data" alt="" />
           <video v-else-if="p.media && p.media[0] && p.media[0].type==='video'" :src="p.media[0].data" muted playsinline />
@@ -266,15 +266,11 @@ export default {
   gap: 16px;
 }
 .card {
-  background: white;
-  border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform 0.12s ease, box-shadow .12s ease;
 }
-.card:hover {
-  transform: translateY(-4px);
-}
+.card:hover { transform: translateY(-6px); box-shadow: 0 8px 28px rgba(0,0,0,0.6); }
 .thumb {
   width: 100%;
   padding-top: 56.25%; /* 16:9 */
@@ -298,10 +294,10 @@ export default {
   margin-bottom: 8px;
 }
 .badge {
-  background: #007bff;
-  color: white;
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
   padding: 4px 8px;
-  border-radius: 12px;
+  border-radius: 999px;
   font-size: 0.875rem;
 }
 .reveal {
