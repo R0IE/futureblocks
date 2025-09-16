@@ -26,6 +26,31 @@
       </div>
     </div>
 
+    <div v-if="route.path === '/' && spotlight && spotlight.length" class="spotlight-row" style="margin:16px 0; display:flex; gap:12px;">
+      <div style="flex:1; display:flex; gap:12px;">
+        <div v-for="s in spotlight" :key="s.id" class="card" style="min-width:220px; cursor:default" @click="$router.push('/post/'+s.id)">
+          <div class="thumb" style="padding-top:40%">
+            <img v-if="s.media && s.media[0]" :src="s.media[0].data" />
+          </div>
+          <div class="card-body">
+            <h4 style="margin:0">{{ s.title }}</h4>
+            <div class="small muted">by {{ s.authorName }} • {{ totalReacts(s) }} reacts • {{ s.supportsTotal || 0 }} tipped</div>
+          </div>
+        </div>
+      </div>
+      <div style="width:260px">
+        <div class="card" style="padding:12px">
+          <div class="small muted">Leaderboard (Creators)</div>
+          <ol style="margin:8px 0 0 16px">
+            <li v-for="c in leaderboardCreators" :key="c.id" style="margin-bottom:8px">
+              <div><strong>{{ c.author?.username || c.author?.email || 'unknown' }}</strong></div>
+              <div class="small muted">Supports: {{ c.totalSupports }} • Reactions: {{ c.totalReacts }}</div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
     <div class="grid">
       <div v-for="p in displayed" :key="p.id" class="card" @click="$router.push('/post/'+p.id)">
         <div class="thumb">
@@ -117,6 +142,18 @@ export default {
 
     const displayed = computed(()=> {
       const arr = posts.slice();
+      // helper score: reactions + supports + urgency
+      function score(p){
+        const reacts = Object.values(p.reactions||{}).reduce((s,x)=>s+x,0);
+        const supports = p.supportsTotal || 0;
+        let urgency = 0;
+        if (p.deadline) {
+          const d = new Date(p.deadline + 'T00:00:00');
+          const diff = (d - Date.now())/(1000*60*60*24);
+          if (diff >= 0 && diff < 7) urgency = 5;
+        }
+        return reacts * 1 + supports * 0.5 + urgency;
+      }
       if (route.path === '/features') {
         arr.sort((a,b)=> {
           const sa = Object.values(a.reactions||{}).reduce((s,x)=>s+x,0);
@@ -133,6 +170,9 @@ export default {
       arr.sort((a,b)=> {
         const ra = Object.values(a.reactions||{}).reduce((s,x)=>s+x,0);
         const rb = Object.values(b.reactions||{}).reduce((s,x)=>s+x,0);
+        if (route.path === '/trending') {
+          return score(b) - score(a) || b.createdAt - a.createdAt;
+        }
         if (rb !== ra) return rb - ra;
         return b.createdAt - a.createdAt;
       });
@@ -146,6 +186,9 @@ export default {
         return hay.includes(query.value);
       });
     });
+
+    const spotlight = computed(()=> store.getSpotlight(3));
+    const leaderboardCreators = computed(()=> store.getLeaderboard('creators', 5));
 
     const heroPost = computed(()=> displayed.value.length ? displayed.value[0] : null);
     const heroStyle = computed(()=> {
@@ -186,7 +229,8 @@ export default {
              route, allTags, selectedTag, selectTag, timeline,
              commentEmojis: [],
              timeUntil,
-             emptyMessage };
+             emptyMessage,
+             spotlight, leaderboardCreators };
   }
 };
 </script>

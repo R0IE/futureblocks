@@ -6,6 +6,7 @@ import PostView from './components/PostView.vue';
 
 const routes = [
   { path: '/', component: PostList },
+  { path: '/trending', component: PostList },
   { path: '/games', component: PostList },
   { path: '/features', component: PostList },
   { path: '/upcoming', component: PostList },

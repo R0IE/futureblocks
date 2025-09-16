@@ -207,6 +207,9 @@ const store = {
       media: (uploadedUrls || []).map(u => ({ type: u && u.startsWith('data:') ? 'image' : 'external', data: u })),
       reactions: {},
       reactedBy: {},
+      supportsTotal: 0, // total amount tipped/support given to this post
+      tips: [], // { userId, amount, createdAt }
+      supports: 0, // simple support count
       comments: [],
       createdAt: Date.now()
     };
@@ -256,8 +259,120 @@ const store = {
       post.reactedBy[uid] = emoji;
       post.reactions[emoji] = (post.reactions[emoji]||0) + 1;
     }
+    // Award simple achievement for first vote
+    try {
+      const user = state.users.find(u => u.id === uid);
+      if (user) {
+        user.achievements = user.achievements || {};
+        if (!user.achievements.firstVote) {
+          user.achievements.firstVote = { earnedAt: Date.now(), desc: 'First Vote' };
+        }
+      }
+      // Maintain creator badges: e.g., First 10 Upvotes
+      const author = state.users.find(u => u.id === post.authorId);
+      if (author) {
+        author.badges = author.badges || {};
+        // compute total upvotes for the author's posts
+        const authorPosts = state.posts.filter(x => x.authorId === author.id);
+        const totalUpvotes = authorPosts.reduce((s,pp)=> s + Object.values(pp.reactions || {}).reduce((a,b)=>a+b,0), 0);
+        if (totalUpvotes >= 10 && !author.badges['first10upvotes']) {
+          author.badges['first10upvotes'] = { awardedAt: Date.now(), desc: 'First 10 Upvotes' };
+        }
+      }
+    } catch (e) {
+      console.warn('award achievement failed', e);
+    }
+
     persist();
     return { ok: true };
+  },
+  
+  // Tip a post (support a creator). Amount is a number (currency units).
+  tipPost(postId, amount) {
+    if (!state.currentUser) return { ok: false, msg: 'auth' };
+    const post = state.posts.find(p => p.id == postId);
+    if (!post) return { ok: false, msg: 'not_found' };
+    const amt = Number(amount) || 0;
+    if (amt <= 0) return { ok: false, msg: 'invalid_amount' };
+    const uid = state.currentUser.id;
+    post.tips = post.tips || [];
+    post.tips.push({ userId: uid, amount: amt, createdAt: Date.now() });
+    post.supportsTotal = (post.supportsTotal || 0) + amt;
+    // track simple supports count
+    post.supports = (post.supports || 0) + 1;
+
+    // award achievements to tipper
+    try {
+      const tipper = state.users.find(u => u.id === uid);
+      if (tipper) {
+        tipper.achievements = tipper.achievements || {};
+        tipper.achievements.firstTip = tipper.achievements.firstTip || { earnedAt: Date.now(), desc: 'First Tip' };
+        // Supported 5 Games
+        const tipsMade = state.posts.reduce((c,p)=> c + (p.tips ? p.tips.filter(t=>t.userId===uid).length : 0), 0);
+        if (tipsMade >= 5 && !tipper.achievements.supported5) {
+          tipper.achievements.supported5 = { earnedAt: Date.now(), desc: 'Supported 5 Games' };
+        }
+      }
+    } catch (e) {
+      console.warn('tip achievements failed', e);
+    }
+
+    // award badges to creator for most supported game if applicable
+    try {
+      const creator = state.users.find(u => u.id === post.authorId);
+      if (creator) {
+        creator.badges = creator.badges || {};
+        const top = this.getLeaderboard('posts', 1);
+        if (top && top.length && top[0].id === post.id) {
+          creator.badges['most_supported_game'] = { awardedAt: Date.now(), desc: 'Most Supported Game' };
+        }
+      }
+    } catch (e) {
+      console.warn('creator badge failed', e);
+    }
+
+    persist();
+    return { ok: true };
+  },
+
+  // Compute a leaderboard of posts or creators by supportsTotal or reactions
+  // type: 'posts' or 'creators' ; limit: number
+  getLeaderboard(type = 'posts', limit = 10, period = 'week') {
+    if (type === 'posts') {
+      const arr = state.posts.slice().sort((a,b)=> (b.supportsTotal || 0) - (a.supportsTotal || 0));
+      return arr.slice(0, limit);
+    } else if (type === 'creators') {
+      // aggregate by authorId
+      const m = {};
+      state.posts.forEach(p=>{
+        m[p.authorId] = m[p.authorId] || { authorId: p.authorId, totalSupports: 0, totalReacts:0 };
+        m[p.authorId].totalSupports += (p.supportsTotal || 0);
+        m[p.authorId].totalReacts += Object.values(p.reactions||{}).reduce((s,x)=>s+x,0);
+      });
+      const arr = Object.values(m).map(x=> ({ id: x.authorId, totalSupports: x.totalSupports, totalReacts: x.totalReacts, author: state.users.find(u=>u.id===x.authorId) }));
+      arr.sort((a,b)=> b.totalSupports - a.totalSupports);
+      return arr.slice(0, limit);
+    }
+    return [];
+  },
+
+  // Return spotlight posts for homepage — pick a few with high engagement and/or editor picks
+  getSpotlight(limit = 3) {
+    // pick posts with recent activity: supports + reactions weighted, prefer upcoming deadlines
+    const score = (p) => {
+      const reacts = Object.values(p.reactions||{}).reduce((s,x)=>s+x,0);
+      const supports = p.supportsTotal || 0;
+      // urgency for deadlines: if within 7 days give bonus
+      let urgency = 0;
+      if (p.deadline) {
+        const d = new Date(p.deadline + 'T00:00:00');
+        const diff = (d - Date.now())/(1000*60*60*24);
+        if (diff >= 0 && diff < 7) urgency = 5;
+      }
+      return reacts * 1 + supports * 0.5 + urgency;
+    };
+    const arr = state.posts.slice().sort((a,b)=> score(b) - score(a));
+    return arr.slice(0, limit);
   },
   getPost(id) {
     return state.posts.find(p => p.id == id);
