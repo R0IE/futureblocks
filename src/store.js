@@ -493,40 +493,83 @@ const store = {
       if (avatarFile && typeof avatarFile.size === 'number' && avatarFile.size > MAX_AVATAR_BYTES) {
         return { ok: false, msg: 'file_too_large' };
       }
-      // If we have a Supabase client and an authenticated Supabase session for this user, upload to 'avatars' bucket
+      // Try centralized server-side upload first (works on Vercel using a service role on the server).
+      // If that fails, fall back to direct Supabase client upload (only when the authenticated
+      // Supabase session matches the user), and finally to an inline data URL.
       let uploadedUrl = null;
       try {
-        if (avatarFile && supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
-          const { data: sessionData } = await supabase.auth.getSession();
-          const sbUser = sessionData?.session?.user ?? null;
-          if (sbUser && String(sbUser.id) === String(userId)) {
-            // attempt upload
+        if (avatarFile) {
+          try {
+            // Convert to data URL and strip prefix for server upload
+            const dataUrl = await fileToDataUrl(avatarFile);
+            const base64 = String(dataUrl).replace(/^data:.*;base64,/, '');
             const mime = avatarFile.type || 'image/png';
             const ext = mime.split('/')[1] || 'png';
             const filename = `avatar_${userId}_${Date.now()}.${ext}`;
-            const path = `avatars/${userId}/${filename}`;
+
+            // POST to our serverless upload endpoint. The server will use the service role key
+            // to upload to Supabase storage and return a public URL. This avoids exposing service
+            // keys in the browser and is compatible with Vercel deployments.
             try {
-              const { error: upErr } = await supabase.storage.from('avatars').upload(path, avatarFile, { contentType: mime });
-              if (!upErr) {
-                const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(path);
-                if (publicData && publicData.publicUrl) uploadedUrl = publicData.publicUrl;
+              const resp = await fetch('/api/upload-avatar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, filename, mime, base64 })
+              });
+              if (resp && resp.ok) {
+                const j = await resp.json().catch(() => ({}));
+                uploadedUrl = j.publicUrl || j.url || null;
               } else {
-                console.warn('Supabase avatar upload error', upErr);
+                // log server response text for debugging
+                const txt = await (resp && resp.text ? resp.text().catch(() => '') : Promise.resolve(''));
+                console.warn('Server avatar upload failed', resp && resp.status, txt);
               }
-            } catch (e) { console.warn('Supabase avatar upload threw', e); }
+            } catch (e) {
+              console.warn('Server avatar upload threw', e);
+            }
+          } catch (e) {
+            console.warn('avatar file -> dataUrl conversion failed', e);
           }
         }
+
+        // If server upload didn't provide a URL, try direct Supabase client upload when authenticated
+        if (!uploadedUrl && avatarFile && supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const sbUser = sessionData?.session?.user ?? null;
+            if (sbUser && String(sbUser.id) === String(userId)) {
+              const mime = avatarFile.type || 'image/png';
+              const ext = mime.split('/')[1] || 'png';
+              const filename = `avatar_${userId}_${Date.now()}.${ext}`;
+              const path = `avatars/${userId}/${filename}`;
+              try {
+                const { error: upErr } = await supabase.storage.from('avatars').upload(path, avatarFile, { contentType: mime });
+                if (!upErr) {
+                  const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(path);
+                  if (publicData && publicData.publicUrl) uploadedUrl = publicData.publicUrl;
+                } else {
+                  console.warn('Supabase avatar upload error', upErr);
+                }
+              } catch (e) { console.warn('Supabase avatar upload threw', e); }
+            }
+          } catch (e) {
+            console.warn('supabase avatar pre-check failed', e);
+          }
+        }
+
+        // Last resort: embed as data URL (keeps everything client-side)
+        if (!uploadedUrl && avatarFile && typeof avatarFile === 'object' && typeof avatarFile.name === 'string') {
+          const dataUrl = await fileToDataUrl(avatarFile);
+          uploadedUrl = dataUrl;
+        } else if (!uploadedUrl && avatarData) {
+          uploadedUrl = avatarData;
+        }
       } catch (e) {
-        console.warn('supabase avatar pre-check failed', e);
+        console.warn('avatar conversion or upload failed', e);
       }
 
       if (uploadedUrl) {
         u.avatar = uploadedUrl;
-      } else if (avatarFile && typeof avatarFile === 'object' && typeof avatarFile.name === 'string') {
-        const dataUrl = await fileToDataUrl(avatarFile);
-        u.avatar = dataUrl;
-      } else if (avatarData) {
-        u.avatar = avatarData;
       }
     } catch (e) {
       console.warn('avatar conversion or upload failed', e);
