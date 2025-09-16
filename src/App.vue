@@ -27,11 +27,14 @@
 
         <div class="top-actions">
           <router-link :to="user ? '/create' : '/auth'" class="create-btn">Create</router-link>
-          <router-link to="/auth" class="acct-link">
+          <router-link v-if="user" :to="{ name: 'profile', params: { id: user.id } }" class="acct-link">
             <img v-if="user && user.avatar" :src="user.avatar" class="avatar" alt="avatar" />
-            <span v-if="user" class="acct-name">{{ user.username }}</span>
-            <span v-else class="acct-name">Login</span>
+            <span class="acct-name">{{ user.username }}</span>
           </router-link>
+          <router-link v-else to="/auth" class="acct-link">
+            <span class="acct-name">Login</span>
+          </router-link>
+          <button class="btn-ghost" @click="toggleTheme" :title="theme==='dark' ? 'Switch to light' : 'Switch to dark'">{{ theme === 'dark' ? '🌙' : '☀️' }}</button>
           <button v-if="user" @click="logout" class="btn-ghost">Logout</button>
         </div>
       </header>
@@ -45,7 +48,7 @@
 
 <script>
 import store from './store';
-import { computed } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 export default {
   setup() {
     const searchQuery = computed({
@@ -53,10 +56,21 @@ export default {
       set: v => store.setSearch(v)
     });
 
+    const theme = ref('dark');
+    function applyTheme(t){
+      try { document.documentElement.setAttribute('data-theme', t); } catch(e){}
+      theme.value = t;
+      try { localStorage.setItem('theme', t); } catch(e){}
+    }
+    function toggleTheme(){ applyTheme(theme.value === 'dark' ? 'light' : 'dark'); }
+    onMounted(()=>{ const saved = (localStorage.getItem('theme') || '').toString(); applyTheme(saved === 'light' ? 'light' : 'dark'); });
+
     return {
       user: store.state.currentUser,
       logout: store.logout,
-      searchQuery
+      searchQuery,
+      theme,
+      toggleTheme
     };
   }
 };

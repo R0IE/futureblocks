@@ -12,7 +12,8 @@ const routes = [
   { path: '/upcoming', component: PostList },
   { path: '/auth', component: Auth },
   { path: '/create', component: CreatePost },
-  { path: '/post/:id', component: PostView, props: true }
+  { path: '/post/:id', name: 'post', component: PostView, props: true },
+  { path: '/profile/:id', name: 'profile', component: () => import('./components/Profile.vue'), props: true }
 ];
 
 export default createRouter({

@@ -40,19 +40,9 @@
             </div>
 
             <div class="tip-area">
-              <button class="tip-btn" @click.stop="toggleTipOpen">Support / Tip</button>
+              <button class="tip-btn" @click.stop="openTipModal">Support / Tip</button>
               <div class="tip-summary small muted">{{ formatCurrency(post.supportsTotal || 0) }} • {{ post.supports || 0 }} supports</div>
-              <div v-if="tipOpen" class="tip-menu" @click.stop>
-                <div class="tip-presets">
-                  <button v-for="a in [1,5,10]" :key="a" class="preset" @click="sendTip(a)">{{ '$' + a }}</button>
-                </div>
-                <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
-                  <input v-model="customTip" placeholder="$2.50" />
-                  <button class="btn-create" @click="sendCustomTip">Send</button>
-                </div>
-                <div class="small muted" style="margin-top:8px">Recent tips: <span v-if="post.tips && post.tips.length">{{ recentTips }}</span><span v-else>None</span></div>
-                <div style="margin-top:6px;color:var(--muted);font-size:12px">Note: This demo stores tips locally and is not connected to a payment processor.</div>
-              </div>
+              <TipModal v-if="showTipModal" :postId="post.id" @close="showTipModal = false" @tipped="onTipped" />
             </div>
 
             <div class="upload" v-if="currentUser && currentUser.id === post.authorId">
@@ -258,8 +248,10 @@
 import store from '../store';
 import { computed, ref, reactive, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import TipModal from './TipModal.vue';
 
 export default {
+  components: { TipModal },
   setup() {
     const route = useRoute();
     const id = route.params.id;
@@ -267,8 +259,7 @@ export default {
     const currentUser = store.state.currentUser;
     const emojis = ['👍','❤️','🚀','🔥'];
     const commentEmojis = ['👍','❤️','🔥'];
-  const tipOpen = ref(false);
-  const customTip = ref('');
+  const showTipModal = ref(false);
 
     const lightboxSrc = ref(null);
     const lightboxItem = ref(null);
@@ -276,20 +267,13 @@ export default {
     function closeLightbox() { lightboxSrc.value = null; lightboxItem.value = null; }
     function isImage(m) { return m && m.type === 'image'; }
 
-    function toggleTipOpen(){ tipOpen.value = !tipOpen.value; }
-
-    function sendTip(amount){
-      const res = store.tipPost(post.value.id, amount);
-      if (res && res.ok) {
-        customTip.value = '';
-        tipOpen.value = false;
-      }
-    }
-
-    function sendCustomTip(){
-      const v = parseFloat((customTip.value || '').toString().replace(/[^0-9\.]/g,''));
-      if (!v || v <= 0) return;
-      sendTip(v);
+    function openTipModal(){ showTipModal.value = true; }
+    function onTipped(payload){
+      // payload: { postId, amount }
+      // store.tipPost already updated the post; UI will reflect changes.
+      showTipModal.value = false;
+      // optionally, we could show a toast here.
+      console.log('Tipped', payload);
     }
 
     async function onFiles(e) {
@@ -428,7 +412,7 @@ export default {
       lightboxSrc, lightboxItem, openMedia, closeLightbox, isImage,
 
       isPostReacted,
-      tipOpen, customTip, toggleTipOpen, sendTip, sendCustomTip,
+      showTipModal, openTipModal, onTipped,
       onFiles, formatCurrency,
     };
   }

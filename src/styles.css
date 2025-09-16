@@ -15,6 +15,17 @@
   --radius: 12px;
 }
 
+/* Light theme overrides */
+[data-theme="light"] {
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --muted: #667085;
+  --text: #0b1220;
+  --neon-purple: #7c5cff;
+  --neon-blue: #0bb7ff;
+  --tip-green: #0f9d58;
+}
+
 /* Base reset */
 *{box-sizing:border-box}
 html,body,#app{height:100%; margin:0; padding:0;}

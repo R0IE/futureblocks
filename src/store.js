@@ -453,6 +453,80 @@ const store = {
     state.searchQuery = (q || '').toString();
     persist();
   },
+  // Update a user's profile fields (name, username, bio, avatar)
+  async updateUser(userId, { name, username, bio, avatarFile, avatarData } = {}) {
+    const u = state.users.find(x => x.id == userId);
+    if (!u) return { ok: false, msg: 'user_not_found' };
+
+    // helper: convert File to data URL
+    async function fileToDataUrl(file) {
+      return await new Promise((res, rej) => {
+        try {
+          const r = new FileReader();
+          r.onload = () => res(String(r.result));
+          r.onerror = rej;
+          r.readAsDataURL(file);
+        } catch (e) { rej(e); }
+      });
+    }
+
+    try {
+      // server-side size limit check: 3 MB
+      const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
+      if (avatarFile && typeof avatarFile.size === 'number' && avatarFile.size > MAX_AVATAR_BYTES) {
+        return { ok: false, msg: 'file_too_large' };
+      }
+      // If we have a Supabase client and an authenticated Supabase session for this user, upload to 'avatars' bucket
+      let uploadedUrl = null;
+      try {
+        if (avatarFile && supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const sbUser = sessionData?.session?.user ?? null;
+          if (sbUser && String(sbUser.id) === String(userId)) {
+            // attempt upload
+            const mime = avatarFile.type || 'image/png';
+            const ext = mime.split('/')[1] || 'png';
+            const filename = `avatar_${userId}_${Date.now()}.${ext}`;
+            const path = `avatars/${userId}/${filename}`;
+            try {
+              const { error: upErr } = await supabase.storage.from('avatars').upload(path, avatarFile, { contentType: mime });
+              if (!upErr) {
+                const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(path);
+                if (publicData && publicData.publicUrl) uploadedUrl = publicData.publicUrl;
+              } else {
+                console.warn('Supabase avatar upload error', upErr);
+              }
+            } catch (e) { console.warn('Supabase avatar upload threw', e); }
+          }
+        }
+      } catch (e) {
+        console.warn('supabase avatar pre-check failed', e);
+      }
+
+      if (uploadedUrl) {
+        u.avatar = uploadedUrl;
+      } else if (avatarFile && typeof avatarFile === 'object' && typeof avatarFile.name === 'string') {
+        const dataUrl = await fileToDataUrl(avatarFile);
+        u.avatar = dataUrl;
+      } else if (avatarData) {
+        u.avatar = avatarData;
+      }
+    } catch (e) {
+      console.warn('avatar conversion or upload failed', e);
+    }
+
+    if (typeof name === 'string') u.name = name;
+    if (typeof username === 'string') u.username = username;
+    if (typeof bio === 'string') u.bio = bio;
+
+    // keep currentUser in sync
+    if (state.currentUser && state.currentUser.id == u.id) {
+      state.currentUser = { ...state.currentUser, username: u.username, avatar: u.avatar, name: u.name };
+    }
+
+    persist();
+    return { ok: true, user: u };
+  },
   getPopular(minReactions = 3) {
     return state.posts.filter(p => {
       const total = Object.values(p.reactions).reduce((a,b)=>a+b,0);
