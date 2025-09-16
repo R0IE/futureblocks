@@ -55,14 +55,16 @@ const store = {
     return { ok: true, msg: 'local_fallback' };
   },
   async login(username, password) {
-    const isEmail = typeof username === 'string' && username.includes('@');
-    if (supabase && isEmail) {
+    // Prefer Supabase when configured and we can interpret the identifier as an email
+    const looksLikeEmail = typeof username === 'string' && username.includes('@');
+    const localHasEmail = state.users.find(u => u.email && u.email === username);
+    if (supabase && (looksLikeEmail || localHasEmail)) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({ email: username, password });
         if (error) return { ok: false, msg: error.message || 'supabase_error' };
         const user = data?.user ?? null;
         if (!user) return { ok: false, msg: 'no_user' };
-        state.currentUser = { id: user.id, username: user.email, avatar: null };
+        state.currentUser = { id: user.id, username: user.email, email: user.email, avatar: null };
         persist();
         return { ok: true };
       } catch (e) {
@@ -70,10 +72,10 @@ const store = {
       }
     }
 
-    // Fallback to local login
+    // Local fallback: username/password matching local store
     const u = state.users.find(x => x.username === username && x.password === password);
     if (!u) return { ok: false };
-    state.currentUser = { id: u.id, username: u.username, avatar: u.avatar || null };
+    state.currentUser = { id: u.id, username: u.username, email: u.email || null, avatar: u.avatar || null };
     persist();
     return { ok: true };
   },
@@ -92,6 +94,21 @@ const store = {
   async createPost({ title, description, deadline, discord, media = [], tags = [] }) {
     if (!state.currentUser) return { ok: false, msg: 'auth' };
     const user = state.currentUser;
+
+    // Check whether the current user has an active Supabase session that matches
+    // the app's currentUser. If not, avoid using Supabase storage/DB (prevents RLS failures).
+    let canUseSupabase = false;
+    try {
+      if (supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const sbUser = sessionData?.session?.user ?? null;
+        if (sbUser && user && sbUser.id === user.id) canUseSupabase = true;
+      }
+    } catch (e) {
+      canUseSupabase = false;
+    }
+
+    const sb = canUseSupabase ? supabase : null;
 
     const uploadedUrls = [];
 
@@ -127,7 +144,6 @@ const store = {
     }
 
     // First try Supabase storage if client is available
-    const sb = typeof supabase !== 'undefined' ? supabase : null;
     for (let i = 0; i < (media || []).length; i++) {
       const m = media[i];
       const { blob, base64, mime } = await toBlobAndBase64(m);
@@ -135,7 +151,7 @@ const store = {
       const filename = `${user.id || 'anon'}_${Date.now()}_${i}.${ext}`;
       const path = `media/${user.id || 'anon'}/${filename}`;
 
-      // Try Supabase upload
+      // Try Supabase upload only when we have a matching Supabase session
       if (sb && sb.storage && typeof sb.storage.from === 'function') {
         try {
           const { error: upErr } = await sb.storage.from('media').upload(path, blob || new Blob([]), { contentType: mime || 'application/octet-stream' });
@@ -178,6 +194,7 @@ const store = {
       }
     }
 
+    // Build local post object
     const post = {
       id: Date.now() + Math.random(),
       authorId: user.id,
@@ -194,6 +211,32 @@ const store = {
       createdAt: Date.now()
     };
 
+    // If we have Supabase session, try inserting a remote DB row (so post exists server-side).
+    // If insert fails due to RLS, return a clear error so you can adjust policies.
+    if (sb) {
+      try {
+        const insertPayload = {
+          title,
+          user_id: user.id,
+          file_path: null,
+          file_url: uploadedUrls[0] || null,
+          created_at: new Date().toISOString()
+        };
+        const { data: inserted, error: insertError } = await sb.from('posts').insert([insertPayload]);
+        if (insertError) {
+          if (insertError.message?.toLowerCase().includes('row-level security')) {
+            return { ok: false, msg: 'Insert blocked by row-level security. Ensure your posts table policy allows inserts where user_id = auth.uid().' };
+          }
+          return { ok: false, msg: insertError.message || 'insert_failed' };
+        }
+        // If remote insert succeeded, prefer the server id if available
+        if (inserted && inserted[0] && inserted[0].id) post.id = inserted[0].id;
+      } catch (e) {
+        return { ok: false, msg: e?.message || String(e) };
+      }
+    }
+
+    // Always keep a local copy so the UI updates even when remote operations aren't used
     state.posts.unshift(post);
     persist();
 
