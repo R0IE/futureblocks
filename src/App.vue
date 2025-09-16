@@ -42,6 +42,7 @@
       <section class="main-area">
         <router-view />
       </section>
+      <Toasts />
     </main>
   </div>
 </template>
@@ -49,7 +50,9 @@
 <script>
 import store from './store';
 import { computed, ref, onMounted } from 'vue';
+import Toasts from './components/Toasts.vue';
 export default {
+  components: { Toasts },
   setup() {
     const searchQuery = computed({
       get: () => store.state.searchQuery,
@@ -75,6 +78,7 @@ export default {
   }
 };
 </script>
+
 
 <style scoped>
 /* layout: single full-width column */

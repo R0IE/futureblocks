@@ -13,6 +13,23 @@ function persist() {
 
 const store = {
   state,
+  // Toasts: global lightweight notifications
+  addToast(message, { type = 'info', timeout = 4000 } = {}) {
+    state.toasts = state.toasts || [];
+    const t = { id: Date.now() + Math.random(), message: message || '', type, createdAt: Date.now() };
+    state.toasts.push(t);
+    if (timeout && timeout > 0) {
+      setTimeout(() => {
+        try { state.toasts = (state.toasts || []).filter(x => x.id !== t.id); } catch(e){}
+      }, timeout);
+    }
+    persist();
+    return t;
+  },
+  removeToast(id) {
+    state.toasts = (state.toasts || []).filter(x => x.id !== id);
+    persist();
+  },
   async register(username, email, password, avatarData) {
     // Require email for registration (UI should provide it)
     const emailProvided = typeof email === 'string' && email.includes('@');

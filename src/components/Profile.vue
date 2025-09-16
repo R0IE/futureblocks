@@ -16,9 +16,14 @@
                 <div class="muted">@{{ user?.username || user?.id || 'guest' }}</div>
               </div>
               <div v-else>
-                <input v-model="form.name" placeholder="Name" />
-                <input v-model="form.username" placeholder="Username" />
-                <textarea v-model="form.bio" placeholder="Bio" rows="3"></textarea>
+                <input class="form-control" v-model="form.name" placeholder="Name" />
+                <input class="form-control" v-model="form.username" placeholder="Username" />
+                <textarea class="form-control" v-model="form.bio" placeholder="Bio" rows="3"></textarea>
+                <div class="avatar-upload">
+                  <label class="small muted">Avatar</label>
+                  <input type="file" @change="onAvatarFile" accept="image/*" />
+                  <div v-if="avatarError" class="field-error">{{ avatarError }}</div>
+                </div>
               </div>
               <div class="badges">
                 <span v-for="b in userBadges" :key="b" class="badge">{{ b }}</span>
@@ -170,6 +175,7 @@ export default {
           editing.value = false;
           avatarFile.value = null;
           avatarError.value = '';
+          try { store.addToast('Profile saved', { type: 'success', timeout: 3000 }); } catch(e){}
         } else {
           console.warn('updateUser failed', res);
           if (res && res.msg === 'file_too_large') avatarError.value = `File is too large. Max ${Math.round(MAX_AVATAR_BYTES/1024/1024)} MB.`;

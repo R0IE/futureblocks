@@ -15,6 +15,20 @@
   --radius: 12px;
 }
 
+/* Polished form controls and error visuals */
+.form-control{ display:block; width:100%; padding:10px 12px; margin-top:8px; border-radius:10px; background:var(--panel); border:1px solid rgba(255,255,255,0.04); color:var(--text); outline:none; }
+.form-control:focus{ box-shadow:0 8px 30px rgba(124,92,255,0.06); border-color: rgba(124,92,255,0.18); }
+.field-error{ color:#ff6b6b; margin-top:6px; font-size:13px; }
+.avatar-upload input[type=file]{ margin-top:8px; }
+
+.btn-create{ transition: transform .12s, box-shadow .12s; }
+.btn-create:hover{ transform:translateY(-2px); box-shadow: 0 10px 30px rgba(124,92,255,0.08); }
+.btn-cancel{ margin-left:8px; }
+
+/* TipModal small improvements */
+.tip-modal .body { max-height: 60vh; overflow:auto; }
+
+
 /* Light theme overrides */
 [data-theme="light"] {
   --bg: #f6f8fb;
