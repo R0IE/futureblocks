@@ -13,7 +13,28 @@ function persist() {
 
 const store = {
   state,
-  register(username, password, avatarData) {
+  async register(username, password, avatarData) {
+    // If Supabase is configured and username looks like an email, try remote auth
+    const isEmail = typeof username === 'string' && username.includes('@');
+    if (supabase && isEmail) {
+      try {
+        const { data, error } = await supabase.auth.signUp({ email: username, password });
+        if (error) return { ok: false, msg: error.message || 'supabase_error' };
+
+        // signUp may not return a session until email confirmation; set basic currentUser
+        const user = data?.user ?? null;
+        state.currentUser = user ? { id: user.id, username: user.email, avatar: avatarData || null } : null;
+        persist();
+
+        // If a session exists, user is logged in immediately; otherwise they must confirm email
+        if (data?.session) return { ok: true, msg: 'registered_logged_in' };
+        return { ok: true, msg: 'registered_check_email' };
+      } catch (e) {
+        return { ok: false, msg: e?.message || String(e) };
+      }
+    }
+
+    // Fallback to local registration (existing behaviour)
     if (!username || !password) return { ok: false, msg: 'missing' };
     if (state.users.find(u => u.username === username)) return { ok: false, msg: 'exists' };
     const user = { id: Date.now() + Math.random(), username, password, avatar: avatarData || null };
@@ -22,14 +43,37 @@ const store = {
     persist();
     return { ok: true };
   },
-  login(username, password) {
+  async login(username, password) {
+    const isEmail = typeof username === 'string' && username.includes('@');
+    if (supabase && isEmail) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: username, password });
+        if (error) return { ok: false, msg: error.message || 'supabase_error' };
+        const user = data?.user ?? null;
+        if (!user) return { ok: false, msg: 'no_user' };
+        state.currentUser = { id: user.id, username: user.email, avatar: null };
+        persist();
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, msg: e?.message || String(e) };
+      }
+    }
+
+    // Fallback to local login
     const u = state.users.find(x => x.username === username && x.password === password);
     if (!u) return { ok: false };
     state.currentUser = { id: u.id, username: u.username, avatar: u.avatar || null };
     persist();
     return { ok: true };
   },
-  logout() {
+  async logout() {
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.warn('supabase signOut failed', e);
+      }
+    }
     state.currentUser = null;
     persist();
   },
