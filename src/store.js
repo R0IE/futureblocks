@@ -249,3 +249,66 @@ const store = {
 };
 
 export default store;
+
+/**
+ * createPost: uploads a file to storage and creates a post row in the DB.
+ * - Ensures the user is authenticated (needed when RLS requires auth.uid()).
+ * - Stores files under a user-scoped path to avoid collisions.
+ * - Inserts a row with user_id to satisfy common RLS policies.
+ *
+ * Usage:
+ *   await createPost({ title: 'My post', file: File });
+ */
+export async function createPost({ title, file, bucket = 'posts', table = 'posts' } = {}) {
+	// ensure we have an authenticated session
+	const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+	if (sessionError) throw sessionError;
+	const user = sessionData?.session?.user;
+	if (!user) throw new Error('Not authenticated. Please sign in before creating posts.');
+
+	// build a user-scoped filename
+	const ext = file.name?.split('.').pop() ?? 'bin';
+	const filePath = `${user.id}/${Date.now()}.${ext}`;
+
+	// upload to storage
+	const { data: uploadData, error: uploadError } = await supabase.storage
+		.from(bucket)
+		.upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+	if (uploadError) {
+		// If this is an RLS/storage policy problem, show a helpful message
+		if (uploadError.message?.toLowerCase().includes('row-level security')) {
+			throw new Error(
+				'Supabase storage upload blocked by RLS. Ensure your storage policies allow the authenticated user to upload to this bucket.'
+			);
+		}
+		throw uploadError;
+	}
+
+	// optionally get a public or signed URL (adjust to your access needs)
+	const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+	const publicUrl = publicUrlData?.publicUrl ?? null;
+
+	// insert a DB row including user_id to satisfy RLS policies that check ownership
+	const insertPayload = {
+		title,
+		user_id: user.id, // common column name used in RLS policies
+		file_path: filePath,
+		file_url: publicUrl,
+		created_at: new Date().toISOString(),
+	};
+
+	const { data: inserted, error: insertError } = await supabase.from(table).insert([insertPayload]);
+
+	if (insertError) {
+		// common RLS-related explanation
+		if (insertError.message?.toLowerCase().includes('row-level security')) {
+			throw new Error(
+				'Insert blocked by row-level security. Make sure your table has a policy allowing authenticated users to insert rows when user_id = auth.uid(), or insert using a server-side service role key.'
+			);
+		}
+		throw insertError;
+	}
+
+	return { post: inserted?.[0] ?? null, upload: uploadData, publicUrl };
+}
