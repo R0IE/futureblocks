@@ -312,3 +312,33 @@ export async function createPost({ title, file, bucket = 'posts', table = 'posts
 
 	return { post: inserted?.[0] ?? null, upload: uploadData, publicUrl };
 }
+
+/**
+ * insertPost: inserts a post row including user_id to satisfy RLS policies.
+ * - payload should include fields matching your posts table (e.g., title, file_path).
+ */
+export async function insertPost(payload = {}, table = 'posts') {
+	// ensure authenticated
+	const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+	if (sessionError) throw sessionError;
+	const user = sessionData?.session?.user;
+	if (!user) throw new Error('Not authenticated — sign in first.');
+
+	// ensure user_id is set to auth.uid()
+	const row = {
+		...payload,
+		user_id: user.id, // important for RLS: must match auth.uid()
+	};
+
+	const { data, error } = await supabase.from(table).insert([row]);
+	if (error) {
+		// helpful message if RLS blocks insert
+		if (error.message?.toLowerCase().includes('row-level security')) {
+			throw new Error(
+				'Insert blocked by RLS. Ensure your posts table has a policy allowing inserts when user_id = auth.uid() and that you are including user_id in the insert.'
+			);
+		}
+		throw error;
+	}
+	return data?.[0] ?? null;
+}
