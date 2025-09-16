@@ -211,14 +211,19 @@ export default {
         });
 
         if (res && res.ok) {
+          store.addToast('Post created', { type: 'success' });
           reset();
           router.push('/post/' + res.post.id);
           return;
         }
 
-        msg.value = res && res.msg ? res.msg : 'Failed to create post';
+        const serverMsg = res && res.msg ? res.msg : 'Failed to create post';
+        store.addToast(serverMsg, { type: 'error' });
+        msg.value = serverMsg;
       } catch (err) {
-        msg.value = 'Upload/creation failed: ' + (err && err.message ? err.message : 'unknown');
+        const errMsg = 'Upload/creation failed: ' + (err && err.message ? err.message : 'unknown');
+        store.addToast(errMsg, { type: 'error' });
+        msg.value = errMsg;
       }
     }
 

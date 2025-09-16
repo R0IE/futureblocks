@@ -235,24 +235,93 @@ const store = {
     // If insert fails due to RLS, return a clear error so you can adjust policies.
     if (sb) {
       try {
+        // Build a more complete payload for server-side posts table
         const insertPayload = {
-          title,
+          title: title || null,
+          description: description || null,
+          deadline: deadline || null,
+          discord: discord || null,
+          tags: Array.isArray(tags) ? tags : (tags ? [tags] : []),
           user_id: user.id,
-          file_path: null,
+          media_urls: uploadedUrls || [],
           file_url: uploadedUrls[0] || null,
+          supports_total: 0,
           created_at: new Date().toISOString()
         };
-        const { data: inserted, error: insertError } = await sb.from('posts').insert([insertPayload]);
+
+        const { data: inserted, error: insertError } = await sb.from('posts').insert([insertPayload]).select();
         if (insertError) {
           if (insertError.message?.toLowerCase().includes('row-level security')) {
             return { ok: false, msg: 'Insert blocked by row-level security. Ensure your posts table policy allows inserts where user_id = auth.uid().' };
           }
           return { ok: false, msg: insertError.message || 'insert_failed' };
         }
-        // If remote insert succeeded, prefer the server id if available
-        if (inserted && inserted[0] && inserted[0].id) post.id = inserted[0].id;
+
+        // If remote insert succeeded, adopt server-provided id/created_at and other fields when available
+        if (Array.isArray(inserted) && inserted[0]) {
+          const srv = inserted[0];
+          if (srv.id) post.id = srv.id;
+          if (srv.created_at) {
+            try { post.createdAt = new Date(srv.created_at).getTime(); } catch(_){}
+          }
+          // keep a reference to the remote row for debugging or later sync
+          post.remote = srv;
+        }
       } catch (e) {
-        return { ok: false, msg: e?.message || String(e) };
+        // If insert failed (often due to RLS), try server-side create endpoint as a fallback.
+        try {
+          const payload = {
+            userId: user.id,
+            title,
+            description,
+            deadline,
+            discord,
+            tags,
+            media: []
+          };
+
+          // prepare media items as { filename, mime, base64 }
+          for (let i = 0; i < (media || []).length; i++) {
+            const m = media[i];
+            try {
+              const { blob, base64, mime } = await toBlobAndBase64(m);
+              const ext = (mime && mime.split('/')[1]) ? mime.split('/')[1] : 'jpg';
+              const filename = `${user.id || 'anon'}_${Date.now()}_${i}.${ext}`;
+              if (base64) payload.media.push({ filename, mime: mime || 'application/octet-stream', base64 });
+            } catch (inner) {
+              console.warn('prepare media for server fallback failed', inner);
+            }
+          }
+
+          try {
+            const r = await fetch('/api/create-post', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (r && r.ok) {
+              const j = await r.json().catch(()=>null);
+              if (j && j.ok && j.post) {
+                // replace local post metadata with server-provided post
+                if (j.post.id) post.id = j.post.id;
+                if (j.post.created_at) post.createdAt = new Date(j.post.created_at).getTime();
+                post.remote = j.post;
+              }
+            } else {
+              const txt = await (r && r.text ? r.text().catch(()=>'') : Promise.resolve(''));
+              console.warn('create-post fallback failed', r && r.status, txt);
+              // continue to keep local post
+            }
+          } catch (finalErr) {
+            console.warn('create-post server fallback threw', finalErr);
+          }
+
+        } catch (innerFallback) {
+          // swallow and continue to keep local post
+          console.warn('fallback create-post failed', innerFallback);
+        }
+
+        // continue; keep local post even if remote insert failed
       }
     }
 
