@@ -397,7 +397,3 @@ export async function insertPost(payload = {}, table = 'posts') {
 	}
 	return data?.[0] ?? null;
 }
-		throw error;
-	}
-	return data?.[0] ?? null;
-}
