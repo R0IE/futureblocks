@@ -13,35 +13,46 @@ function persist() {
 
 const store = {
   state,
-  async register(username, password, avatarData) {
-    // If Supabase is configured and username looks like an email, try remote auth
-    const isEmail = typeof username === 'string' && username.includes('@');
-    if (supabase && isEmail) {
+  async register(username, email, password, avatarData) {
+    // Require email for registration (UI should provide it)
+    const emailProvided = typeof email === 'string' && email.includes('@');
+    // Try Supabase when configured and email is present
+    if (supabase && emailProvided) {
       try {
-        const { data, error } = await supabase.auth.signUp({ email: username, password });
-        if (error) return { ok: false, msg: error.message || 'supabase_error' };
-
-        // signUp may not return a session until email confirmation; set basic currentUser
-        const user = data?.user ?? null;
-        state.currentUser = user ? { id: user.id, username: user.email, avatar: avatarData || null } : null;
-        persist();
-
-        // If a session exists, user is logged in immediately; otherwise they must confirm email
-        if (data?.session) return { ok: true, msg: 'registered_logged_in' };
-        return { ok: true, msg: 'registered_check_email' };
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          const msg = (error.message || '').toString();
+          if (msg.toLowerCase().includes('anonymous')) {
+            // Fall back to local below
+            console.warn('Supabase anonymous provider disabled — falling back to local registration:', msg);
+          } else {
+            return { ok: false, msg: msg || 'supabase_error' };
+          }
+        } else {
+          const user = data?.user ?? null;
+          state.currentUser = user ? { id: user.id, username: username || user.email, email: user.email, avatar: avatarData || null } : null;
+          persist();
+          if (data?.session) return { ok: true, msg: 'registered_logged_in' };
+          return { ok: true, msg: 'registered_check_email' };
+        }
       } catch (e) {
-        return { ok: false, msg: e?.message || String(e) };
+        const em = (e?.message || '').toString();
+        if (em.toLowerCase().includes('anonymous')) {
+          console.warn('Supabase anonymous provider disabled — falling back to local registration:', em);
+        } else {
+          return { ok: false, msg: em || String(e) };
+        }
       }
     }
 
-    // Fallback to local registration (existing behaviour)
-    if (!username || !password) return { ok: false, msg: 'missing' };
-    if (state.users.find(u => u.username === username)) return { ok: false, msg: 'exists' };
-    const user = { id: Date.now() + Math.random(), username, password, avatar: avatarData || null };
+    // Local fallback registration (client-side only) — require email as well
+    if (!username || !password || !emailProvided) return { ok: false, msg: 'missing' };
+    if (state.users.find(u => u.username === username || (u.email && u.email === email))) return { ok: false, msg: 'exists' };
+    const user = { id: Date.now() + Math.random(), username, email, password, avatar: avatarData || null };
     state.users.push(user);
-    state.currentUser = { id: user.id, username: user.username, avatar: user.avatar || null };
+    state.currentUser = { id: user.id, username: user.username, email: user.email, avatar: user.avatar || null };
     persist();
-    return { ok: true };
+    return { ok: true, msg: 'local_fallback' };
   },
   async login(username, password) {
     const isEmail = typeof username === 'string' && username.includes('@');
@@ -382,6 +393,10 @@ export async function insertPost(payload = {}, table = 'posts') {
 				'Insert blocked by RLS. Ensure your posts table has a policy allowing inserts when user_id = auth.uid() and that you are including user_id in the insert.'
 			);
 		}
+		throw error;
+	}
+	return data?.[0] ?? null;
+}
 		throw error;
 	}
 	return data?.[0] ?? null;

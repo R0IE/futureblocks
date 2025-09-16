@@ -14,7 +14,7 @@
       <div class="form-col">
         <form @submit.prevent="login" class="card">
           <h3>Login</h3>
-          <input v-model="loginName" placeholder="username" />
+          <input v-model="loginName" placeholder="username or email" />
           <input v-model="loginPass" type="password" placeholder="password" />
           <button>Login</button>
         </form>
@@ -24,6 +24,7 @@
         <form @submit.prevent="register" class="card">
           <h3>Create account</h3>
           <input v-model="regName" placeholder="username" />
+          <input v-model="regEmail" placeholder="email" />
           <input v-model="regPass" type="password" placeholder="password" />
           <label class="avatar-label">Avatar (optional)</label>
           <input type="file" @change="onFile" accept="image/*" />
@@ -47,15 +48,19 @@ import supabase from '../lib/supabase';
 
 export default {
   setup() {
-    const r = reactive({ loginName: '', loginPass: '', regName: '', regPass: '', msg: '' });
+    const r = reactive({ loginName: '', loginPass: '', regName: '', regEmail: '', regPass: '', msg: '' });
     const avatarPreview = ref(null);
     const avatarData = ref(null);
     const router = useRouter();
 
-    function login() {
-      const res = store.login(r.loginName, r.loginPass);
-      if (res.ok) router.push('/');
-      else r.msg = 'invalid credentials';
+    async function login() {
+      r.msg = '';
+      const res = await store.login(r.loginName, r.loginPass);
+      if (res.ok) {
+        router.push('/');
+      } else {
+        r.msg = res.msg || 'invalid credentials';
+      }
     }
 
     function onFile(e) {
@@ -69,10 +74,19 @@ export default {
       reader.readAsDataURL(f);
     }
 
-    function register() {
-      const res = store.register(r.regName, r.regPass, avatarData.value);
-      if (res.ok) router.push('/');
-      else r.msg = res.msg === 'exists' ? 'username taken' : 'missing fields';
+    async function register() {
+      r.msg = '';
+      const res = await store.register(r.regName, r.regEmail, r.regPass, avatarData.value);
+      if (res.ok) {
+        // provide feedback depending on whether we used Supabase or local fallback
+        if (res.msg === 'registered_check_email') r.msg = 'Check your email to confirm registration.';
+        else if (res.msg === 'registered_logged_in') router.push('/');
+        else router.push('/');
+      } else {
+        if (res.msg === 'exists') r.msg = 'username or email already in use';
+        else if (res.msg === 'missing') r.msg = 'missing fields';
+        else r.msg = res.msg || 'registration failed';
+      }
     }
 
     return { ...toRefs(r), avatarPreview, onFile, login, register, user: store.state.currentUser, msg: r.msg };
@@ -90,30 +104,6 @@ export default {
     if (this.authListener?.subscription) {
       this.authListener.subscription.unsubscribe();
     }
-  },
-  methods: {
-    async login() {
-      this.message = null;
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: this.email,
-        password: this.password,
-      });
-      if (error) this.message = error.message;
-      else this.user = data.user ?? null;
-    },
-    async register() {
-      this.message = null;
-      const { data, error } = await supabase.auth.signUp({
-        email: this.email,
-        password: this.password,
-      });
-      if (error) this.message = error.message;
-      else this.message = 'Registration successful — check your email if confirmation is required.';
-    },
-    async signOut() {
-      await supabase.auth.signOut();
-      this.user = null;
-    },
   },
 };
 </script>
